@@ -1,0 +1,18 @@
+name = Ting Light Search
+description = Faster search for Ting.
+core = 7.x
+package = Ding!
+php = 5.2.4
+dependencies[] = ctools
+dependencies[] = features
+dependencies[] = number
+dependencies[] = page_manager
+dependencies[] = strongarm
+dependencies[] = text
+dependencies[] = ting
+dependencies[] = ting_search
+dependencies[] = ding_availability
+dependencies[] = search
+files[] = includes/object.inc
+files[] = includes/availability.inc
+

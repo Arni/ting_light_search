@@ -1,0 +1,255 @@
+<?php
+
+function ting_light_search_init(){
+  //file_put_contents("/home/quickstart/work/debug/debuglightsearch.txt", print_r("ramt3" , TRUE), FILE_APPEND);
+//  drupal_add_css(drupal_get_path('module', 'ding_availability') . '/css/ding_availability_legend.css');
+//  drupal_add_css(drupal_get_path('module', 'ding_availability') . '/css/ding_availability.css');
+//  drupal_add_js(drupal_get_path('module', 'ting_lightweight_search') . '/js/lightweight_ding_availability.js');
+//  drupal_add_css(drupal_get_path('module', 'ding_facetbrowser') . '/css/facetbrowser.css');
+//  drupal_add_js(drupal_get_path('module', 'ding_facetbrowser') . '/js/jquery.cookie.min.js');
+//  drupal_add_js(drupal_get_path('module', 'ting_lightweight_search') . '/js/facetbrowser.js');
+//  drupal_add_js(array(
+//    'dingFacetBrowser' => array(
+//      'mainElement' => '.pane-ding-facetbrowser',
+//      'number_of_terms' => variable_get('ding_facetbrowser_number_of_terms', 5),
+//    )
+//  ), 'setting');
+  //drupal_add_js(drupal_get_path('module', 'ting_lightweight_search') . '/js/jquery.history.js');
+}
+
+/**
+ * Implements hook_search_info().
+ */
+function ting_light_search_search_info() {
+  return array(
+    'title' => t('Ting Light'),
+    'path' => 'ting',
+    'conditions_callback' => 'ting_search_conditions_callback',
+  );
+}
+
+/**
+ * Implements hook_search_execute().
+ */
+function ting_light_search_search_execute($keys = NULL, $conditions = NULL) {
+  file_put_contents("/home/quickstart/work/debug/debuglightsearch.txt", print_r("ramt" , TRUE), FILE_APPEND);
+  // TODO: Set sort options
+  $options    = array();
+  $results    = array();
+  $facetArray = array();
+  $query      = '(' . _ting_search_quote($keys) . ')';
+  $options['numFacets'] = 25;
+  module_load_include('client.inc', 'ting');
+   //Extend query with selected facets
+  if (isset($conditions['facets']) && $conditions['facets'] != NULL) {
+    $facets = $conditions['facets'];
+    foreach ($facets as $facet) {
+      $facet = explode(':', $facet, 2);
+      if ($facet[0]) {
+        $facetArray[] = $facet[0] . '="' . rawurldecode($facet[1]) . '"';
+      }
+    }
+
+    $query .= ' AND ' . implode(' AND ', $facetArray);
+  }
+  try {
+    $page = pager_find_page();
+
+    $resultsPerPage = variable_get('ting_search_results_per_page', 10);
+    if (!empty($conditions['size'])) {
+      $resultsPerPage = $conditions['size'];
+    }
+
+    if (!empty($conditions['sort'])) {
+      $options['sort'] = $conditions['sort'];
+    }
+
+    $searchResult = ting_do_search($query, $page + 1, $resultsPerPage, $options);
+    if (isset($searchResult->collections)) {
+      $searchResult->search_key = $keys;
+
+      // TODO: caching highes total_result know value of specific search
+      //       at the moment we only know if there is one more page
+      $total_results = ($page + 1) * $resultsPerPage + ($searchResult->more ? 1 : 0);
+
+      pager_default_initialize($total_results, $resultsPerPage);
+
+      foreach ($searchResult->collections as &$collection) {
+        $build = ting_collection_view($collection, 'teaser');
+        $uri = entity_uri('ting_collection', $collection);
+        $results[] = array(
+          'link' => url($uri['path'], $uri['options']),
+          'type' => '',
+          'title' => $collection->title,
+          'user' => '',
+          'date' => '',
+          'snippet' => drupal_render($build),
+        );
+      }
+    }
+  }
+  catch (TingClientException $e) {
+    // TODO: Log the error.
+    $results = array();
+  }
+
+  drupal_static('ting_search_results', $searchResult);
+
+  return $results;
+}
+
+ /**
+   * Process series information
+   * This could be handled more elegantly if we had better structured data.
+   * For now we have to work with what we got to convert titles to links
+   * Series information appear in the following formats:
+   * - Samhørende: [title 1] ; [title 2] ; [title 3]
+   * - [volumne number]. del af: [title]
+   */
+  function ting_light_search_process_series_description($series) {
+    $result = '';
+    $parts = explode(':', $series);
+
+    if (is_array($parts) && count($parts >= 2)) {
+      $prefix = $parts[0] . ': ';
+
+      if (stripos($prefix, 'del af:') !== FALSE) {
+        $title = $parts[1];
+        $result = $prefix . l($title, '/search/ting/' . '"' . $title . '"');
+      } else if (stripos($prefix, 'Samhørende:') !== FALSE) {
+
+        $titles = $parts[1];
+        // Multiple titles are separated by ' ; '. Explode to iterate over them
+        $titles = explode(' ; ', $titles);
+        foreach ($titles as &$title) {
+          $title = trim($title);
+          // Some title elements are actually volumne numbers. Do not convert these to links
+          if (!preg_match('/(nr.)? \d+/i', $title)) {
+            $title = l($title, '/search/ting/' . '"' . $title . '"');
+          }
+        }
+        // Reassemple titles
+        $titles = implode(', ', $titles);
+        $result = $prefix . ' ' . $titles;
+      }
+    }
+
+    return $result;
+  }
+
+
+
+function ting_light_search_parse_search_results($results) {
+  $output = array();
+  foreach ($results->collections as $collection) {    
+    if (isset($collection->objects[0])) {
+      $object = $collection->objects[0];
+      $output[] = array(
+       'title'    => getTitle($object),
+       'creators' => getCreators($object),
+       'subjects' => getSubjects($object),
+       'abstract' => getAbstract($object),
+       'local_id' => getLocalId($object),
+       'owner_id' => getOwnerId($object),
+       'date'     => getObjectDate($object),
+       'serie_title' => getSerieTitle($object),
+       'serie_description' => getSerieDescription($object),
+       'types' => process_types ($collection),
+      );
+    } 
+
+  }
+  return $output;
+}
+
+function ting_light_search_process_types($collection) {
+  $types = array();
+  foreach ($collection->objects as $object) {
+    $type_value = getObjectType($object);
+    $type_exists_allready = false;
+    foreach ($types as &$type) {
+      if (is_same_type ($type['type'], $type_value, getLocalId($object))) {
+        $type_exists_allready = true;
+        $type['count'] = $type['count'] + 1;
+        if (is_check_availability_type(getAc_source($object), $type_value)) {
+          $type['object_ids'][] = getLocalId($object);
+        }
+        break;
+      }
+    }
+    if (!$type_exists_allready) {
+      $new_type = array(
+        'type' => $type_value,
+        'local_id' => getLocalId($object),
+        'owner_id' => getOwnerId($object),
+        'count' => 1,
+        'object_ids' => array(),
+      );
+      if (is_check_availability_type(getAc_source($object), $type_value)) {
+        $new_type['object_ids'][] = getLocalId($object);
+      }
+      $types[] = $new_type;
+    }
+  }
+  return $types;
+}
+
+function my_theme_search($results, $vars) {
+  $items = array();
+  foreach ($results as $result) {
+    $vars = array();
+    $collection_link = '/ting/collection/' . $result['owner_id'] . ':' . $result['local_id'];
+    if (isset($result['title'])) {
+      $vars['title_link'] = l($result['title'], $collection_link);
+    }
+
+    $image_src = 'https://test.randersbib.dk/profiles/ding/modules/ting/modules/ting_covers/index.php?ownerid=' . $result['owner_id'] . '&objectid=' . $result['local_id'];
+    $image = '<img src="' . $image_src . '">';
+    $vars['image'] = l($image, $collection_link);
+
+    if (isset($result['creators']) && !empty($result['creators'])) {
+      $creators = 'Af ';
+      foreach ($result['creators'] as $creator) {
+        $creators .= l($creator, '/search/ting/dc.creator=' . $creator, "author"); //'<a class="author" href="/search/ting/dc.creator=' . $creator . '"> ' . $creator . '</a> ';
+      }
+      $vars['creators'] = $creators;
+    }
+
+    $vars['abstract'] = $result['abstract'];
+    $vars['date'] = ' ( ' . $result['date'] . ')';
+
+    if ($result['serie_title']) {
+      $serie_search = check_plain(str_replace('@serietitle', $result['serie_title'], 'bib.titleSeries="@serietitle" OR dc.description="@serietitle"'));
+      $vars['serie'] = l($result['serie_title'], '/search/ting/' . $serie_search, "series");
+    } else if ($result['serie_description']) {
+      $vars['serie'] = $result['serie_description'];
+    }
+
+    if ($result['subjects']) {
+      $subjects = array();
+      foreach ($result['subjects'] as $subject) {
+        $subjects[] = l($subject, '/search/ting/dc.subject=' . $subject, "subject");
+      }
+      $vars['subjects'] = $subjects;
+    }
+    //<li id="availability-77300027963390-dvd" class="availability dvd  pending first last"><a href="/ting/object/773000%3A27963390">Dvd</a></li>
+    if ($result['types']) {
+      $types = array();
+      foreach ($result['types'] as $type) {
+        $id = availability_id($type);
+        $class = availability_class ($type['type']);
+        if ($type['count'] == 1) {
+          $path = '/ting/object/' . $type['owner_id'] . ':' . $type['local_id'];
+        } else {
+          $path = '/ting/collection/' . $type['owner_id'] . ':' . $type['local_id'];
+        }
+
+        $types[] = '<li id="' . $id . '" class="' . $class . '">' . l(availability_text($type['type']), $path) . '</li>';
+      }
+      $vars['types'] = $types;
+    }
+    $items[] = my_theme('./templates/item-template.php', $vars);
+  }
+  $vars['items'] = $items;
+ 
+}
