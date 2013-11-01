@@ -1,92 +1,135 @@
 <?php
 
-function getTitle($object) {
-  // If we couldn't find the object, use the title of the first object.
-  $title = FALSE;
-  if (isset($object->record['dc:title'])) {
-    if (isset($object->record['dc:title']['dkdcplus:full'])) {
-      $title = $object->record['dc:title']['dkdcplus:full'][0];
-    } else {
-      $title = $object->record['dc:title'][''][0];
-    }
-  }
-  return $title;
-}
+class TingLightSearchObject {
 
-function getObjectType($object) {
-  return!empty($object->record['dc:type']['dkdcplus:BibDK-Type'][0]) ? $object->record['dc:type']['dkdcplus:BibDK-Type'][0] : FALSE;
-}
-
-function getAbstract($object) {
-  return!empty($object->record['dcterms:abstract'][''][0]) ? $object->record['dcterms:abstract'][''][0] : FALSE;
-}
-
-function getCreators($object) {
-  $creators = array();
-  if (!empty($object->record['dc:creator'])) {
-    foreach ($object->record['dc:creator'] as $type => $dc_creator) {
-      if ($type != 'oss:sort') {
-        $creators = array_merge($creators, $dc_creator);
+  function getTitle($object) {
+    // If we couldn't find the object, use the title of the first object.
+    $title = FALSE;
+    if (isset($object->record['dc:title'])) {
+      if (isset($object->record['dc:title']['dkdcplus:full'])) {
+        $title = $object->record['dc:title']['dkdcplus:full'][0];
+      } else {
+        $title = $object->record['dc:title'][''][0];
       }
     }
+    return $title;
   }
-  return $creators;
-}
 
-function getSubjects($object) {
-  $subjects = array();
-  if (!empty($object->record['dc:subject'])) {
-    foreach ($object->record['dc:subject'] as $type => $dc_subject) {
-      if (!in_array($type, array('dkdcplus:genre', 'dkdcplus:DK5', 'dkdcplus:DK5-Text', 'dkdcplus:DBCO', 'dkdcplus:DBCN'))) {
-        $subjects = array_merge($subjects, $dc_subject);
+  function getObjectType($object) {
+    return!empty($object->record['dc:type']['dkdcplus:BibDK-Type'][0]) ? $object->record['dc:type']['dkdcplus:BibDK-Type'][0] : FALSE;
+  }
+
+  function getAbstract($object) {
+    return!empty($object->record['dcterms:abstract'][''][0]) ? $object->record['dcterms:abstract'][''][0] : FALSE;
+  }
+
+  function getCreators($object) {
+    $creators = array();
+    if (!empty($object->record['dc:creator'])) {
+      foreach ($object->record['dc:creator'] as $type => $dc_creator) {
+        if ($type != 'oss:sort') {
+          $creators = array_merge($creators, $dc_creator);
+        }
       }
     }
+    return $creators;
   }
-  return $subjects;
-}
 
-function getLocalId($object) {
-  return!empty($object->localId) ? $object->localId : FALSE;
-}
-
-function getOwnerId($object) {
-  return!empty($object->ownerId) ? $object->ownerId : FALSE;
-}
-
-function getObjectDate($object) {
-  return!empty($object->record['dc:date']) ? $object->record['dc:date'][''][0] : FALSE;
-}
-
-function getSerieNumber($object) {
-  $serie = splitSerie($object);
-  // Last part is the number.
-  if (empty($serie[1])) {
-    return FALSE;
+  function getSubjects($object) {
+    $subjects = array();
+    if (!empty($object->record['dc:subject'])) {
+      foreach ($object->record['dc:subject'] as $type => $dc_subject) {
+        if (!in_array($type, array('dkdcplus:genre', 'dkdcplus:DK5', 'dkdcplus:DK5-Text', 'dkdcplus:DBCO', 'dkdcplus:DBCN'))) {
+          $subjects = array_merge($subjects, $dc_subject);
+        }
+      }
+    }
+    return $subjects;
   }
-  return $serie[1];
-}
 
-function splitSerie($object) {
-  $serie = !empty($object->record['dc:title']['dkdcplus:series'][0]) ? $object->record['dc:title']['dkdcplus:series'][0] : '';
-  return explode(';', $serie);
-}
-
-function getSerieTitle($object) {
-  $serie = splitSerie($object);
-  // First part is the title.
-  if (empty($serie[0])) {
-    return FALSE;
+  function getLocalId($object) {
+    return!empty($object->localId) ? $object->localId : FALSE;
   }
-  return trim($serie[0]);
-}
 
-function getSerieDescription($object) {
-  $serie = !empty($object->record['dc:description']['dkdcplus:series'][0]) ? $object->record['dc:description']['dkdcplus:series'][0] : '';
-  return process_series_description($serie);
-}
+  function getOwnerId($object) {
+    return!empty($object->ownerId) ? $object->ownerId : FALSE;
+  }
 
-function getAc_source($object) {
-  return!empty($object->record['ac:source'][''][0]) ? $object->record['ac:source'][''][0] : FALSE;
+  function getObjectDate($object) {
+    return!empty($object->record['dc:date']) ? $object->record['dc:date'][''][0] : FALSE;
+  }
+
+  function getSerieNumber($object) {
+    $serie = splitSerie($object);
+    // Last part is the number.
+    if (empty($serie[1])) {
+      return FALSE;
+    }
+    return $serie[1];
+  }
+
+  function splitSerie($object) {
+    $serie = !empty($object->record['dc:title']['dkdcplus:series'][0]) ? $object->record['dc:title']['dkdcplus:series'][0] : '';
+    return explode(';', $serie);
+  }
+
+  function getSerieTitle($object) {
+    $serie = $this->splitSerie($object);
+    // First part is the title.
+    if (empty($serie[0])) {
+      return FALSE;
+    }
+    return trim($serie[0]);
+  }
+
+  function getSerieDescription($object) {
+    $serie = !empty($object->record['dc:description']['dkdcplus:series'][0]) ? $object->record['dc:description']['dkdcplus:series'][0] : '';
+    return $this->process_series_description($serie);
+  }
+  
+   /**
+   * Process series information
+   * This could be handled more elegantly if we had better structured data.
+   * For now we have to work with what we got to convert titles to links
+   * Series information appear in the following formats:
+   * - Samhørende: [title 1] ; [title 2] ; [title 3]
+   * - [volumne number]. del af: [title]
+   */
+  function process_series_description($series) {
+    $result = '';
+    $parts = explode(':', $series);
+
+    if (is_array($parts) && count($parts >= 2)) {
+      $prefix = $parts[0] . ': ';
+
+      if (stripos($prefix, 'del af:') !== FALSE) {
+        $title = $parts[1];
+        $result = $prefix . l($title, '/search/ting/' . '"' . $title . '"');
+      } else if (stripos($prefix, 'Samhørende:') !== FALSE) {
+
+        $titles = $parts[1];
+        // Multiple titles are separated by ' ; '. Explode to iterate over them
+        $titles = explode(' ; ', $titles);
+        foreach ($titles as &$title) {
+          $title = trim($title);
+          // Some title elements are actually volumne numbers. Do not convert these to links
+          if (!preg_match('/(nr.)? \d+/i', $title)) {
+            $title = l($title, '/search/ting/' . '"' . $title . '"');
+          }
+        }
+        // Reassemple titles
+        $titles = implode(', ', $titles);
+        $result = $prefix . ' ' . $titles;
+      }
+    }
+
+    return $result;
+  }
+
+  function getAc_source($object) {
+    return!empty($object->record['ac:source'][''][0]) ? $object->record['ac:source'][''][0] : FALSE;
+  }
+
 }
 
 ?>
